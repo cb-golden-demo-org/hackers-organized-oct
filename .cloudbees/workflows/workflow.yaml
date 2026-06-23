@@ -21,7 +21,7 @@ jobs:
           url: ${{ vars.JENKINS_URL }}
           username: ${{ secrets.JENKINS_USERNAME }}
           token: ${{ secrets.JENKINS_TOKEN }}
-          job-name: Core/Pet Clinic Pipeline
+          job-name: "Core/Pet Clinic Pipeline"
       - name: Run unit tests
         kind: test
         id: unit-tests
