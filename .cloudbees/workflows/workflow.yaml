@@ -11,13 +11,11 @@ permissions:
   id-token: write
 jobs:
   build-and-test:
-    outputs:
-      artifact-id: ${{ steps.build-image.outputs.artifact-ids }}
     steps:
       - name: Get source code
         uses: cloudbees-io/checkout@v1
       - name: Run Jenkins CI on snaqvi-unify
-        kind: test
+        kind: build
         uses: cloudbees-io/jenkins-run-job@v2
         with:
           url: ${{ vars.JENKINS_URL }}
@@ -25,8 +23,8 @@ jobs:
           token: ${{ secrets.JENKINS_TOKEN }}
           job-name: Core/Pet Clinic Pipeline
       - name: Run unit tests
-        id: unit-tests
         kind: test
+        id: unit-tests
         uses: docker://maven:3.9-eclipse-temurin-17
         run: |
           mvn test -q
@@ -38,8 +36,8 @@ jobs:
           username: ${{ vars.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
       - name: Build container image
-        id: build-image
         kind: build
+        id: build-image
         uses: cloudbees-io/kaniko@v1
         with:
           destination: index.docker.io/${{ vars.DOCKER_USER }}/bcbs-az-claims-api:${{ cloudbees.scm.sha }}
@@ -54,6 +52,8 @@ jobs:
             | Unit Tests | Passed |
             | Container Image | `${{ vars.DOCKER_USER }}/bcbs-az-claims-api:${{ cloudbees.scm.sha }}` |
           format: MARKDOWN
+    outputs:
+      artifact-id: ${{ steps.build-image.outputs.artifact-ids }}
   security-scan:
     needs: build-and-test
     steps:
