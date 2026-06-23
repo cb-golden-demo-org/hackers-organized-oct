@@ -35,13 +35,12 @@ jobs:
         kind: build
         uses: docker://alpine:3.20
         run: |
-          SHORT_SHA=$(echo "${{ cloudbees.scm.sha }}" | cut -c1-8)
           BUILD_NUM=${{ cloudbees.run_number }}
-          echo "=============================================="
+          echo "============================================="
           echo "  CloudBees CI — snaqvi-unify"
-          echo "  Job: Core/Pet Clinic Pipeline"
+          echo "  Job: Core/BCBS-AZ-Claims-API"
           echo "  Build: #${BUILD_NUM}"
-          echo "=============================================="
+          echo "============================================="
           echo "[INFO] Checking out ${{ cloudbees.scm.sha }}"
           echo "[INFO] Building bcbs-az-claims-api 1.0.${BUILD_NUM}"
           echo "[INFO] Compiling 47 source files"
@@ -50,7 +49,6 @@ jobs:
           echo "[INFO] Running com.bcbsaz.claims.ProviderServiceTest     — 21 tests PASS"
           echo "[INFO] Building jar: bcbs-az-claims-api-1.0.${BUILD_NUM}.jar (18.4 MB)"
           echo "[INFO] BUILD SUCCESS — Duration: 1 min 47 sec"
-          echo "URL: https://sda.preview.cb-demos.io/snaqvi-unify/job/Core/job/Pet%20Clinic%20Pipeline/${BUILD_NUM}/"
           printf '%s' "${BUILD_NUM}" > $CLOUDBEES_OUTPUTS/build-number
           printf '%s' "SUCCESS"      > $CLOUDBEES_OUTPUTS/status
 
@@ -67,6 +65,109 @@ jobs:
           echo "Line coverage: 84.3%  Branch coverage: 79.1%"
           printf '%s' "86"   > $CLOUDBEES_OUTPUTS/tests-run
           printf '%s' "84.3" > $CLOUDBEES_OUTPUTS/coverage
+          mkdir -p test-results
+          cat > test-results/junit.xml << 'XMLEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites name="bcbs-az-claims-api" tests="86" failures="0" errors="0" skipped="0" time="1.892">
+            <testsuite name="com.bcbsaz.claims.ClaimsServiceTest" tests="38" failures="0" errors="0" skipped="0" time="0.847">
+              <testcase name="testSubmitNewClaim" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.032"/>
+              <testcase name="testSubmitDuplicateClaim" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.019"/>
+              <testcase name="testGetClaimById" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.021"/>
+              <testcase name="testGetClaimByMemberId" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.018"/>
+              <testcase name="testUpdateClaimStatus" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.025"/>
+              <testcase name="testClaimDenialReason" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.022"/>
+              <testcase name="testClaimApprovalWorkflow" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.029"/>
+              <testcase name="testClaimAmountValidation" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.017"/>
+              <testcase name="testClaimDateValidation" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.016"/>
+              <testcase name="testClaimProviderNPI" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.023"/>
+              <testcase name="testClaimDiagnosisCode" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.020"/>
+              <testcase name="testClaimProcedureCode" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.018"/>
+              <testcase name="testBatchClaimSubmission" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.041"/>
+              <testcase name="testClaimSearchByDate" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.019"/>
+              <testcase name="testClaimSearchByProvider" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.021"/>
+              <testcase name="testClaimSearchByDiagnosis" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.018"/>
+              <testcase name="testClaimPagination" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.024"/>
+              <testcase name="testClaimSortByDate" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.017"/>
+              <testcase name="testClaimExportCSV" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.033"/>
+              <testcase name="testClaimExportPDF" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.038"/>
+              <testcase name="testClaimAuditLog" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.022"/>
+              <testcase name="testClaimStatusHistory" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.019"/>
+              <testcase name="testClaimResubmission" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.027"/>
+              <testcase name="testClaimVoidRequest" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.021"/>
+              <testcase name="testClaimCoordination" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.025"/>
+              <testcase name="testClaimCOBCalculation" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.029"/>
+              <testcase name="testClaimDeductibleApplied" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.020"/>
+              <testcase name="testClaimCopayCalculation" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.018"/>
+              <testcase name="testClaimCoinsuranceCalc" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.019"/>
+              <testcase name="testClaimOOPMaxApplied" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.022"/>
+              <testcase name="testClaimNetworkValidation" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.021"/>
+              <testcase name="testClaimOutOfNetwork" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.024"/>
+              <testcase name="testClaimPreAuthRequired" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.020"/>
+              <testcase name="testClaimPreAuthApproved" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.023"/>
+              <testcase name="testClaimReferralValidation" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.019"/>
+              <testcase name="testClaimTimeliness835" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.022"/>
+              <testcase name="testClaim837PTransaction" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.026"/>
+              <testcase name="testClaimEDI999Ack" classname="com.bcbsaz.claims.ClaimsServiceTest" time="0.018"/>
+            </testsuite>
+            <testsuite name="com.bcbsaz.claims.EligibilityServiceTest" tests="27" failures="0" errors="0" skipped="0" time="0.612">
+              <testcase name="testCheckEligibilityActive" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.028"/>
+              <testcase name="testCheckEligibilityTerminated" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.021"/>
+              <testcase name="testCheckEligibilityFuture" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.019"/>
+              <testcase name="testMemberLookupByMBI" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.024"/>
+              <testcase name="testMemberLookupBySSN" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.022"/>
+              <testcase name="testMemberLookupByName" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.025"/>
+              <testcase name="testBenefitSummaryMedical" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.020"/>
+              <testcase name="testBenefitSummaryDental" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.018"/>
+              <testcase name="testBenefitSummaryVision" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.019"/>
+              <testcase name="testDeductibleBalance" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.022"/>
+              <testcase name="testOOPMaxBalance" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.021"/>
+              <testcase name="testCopaySchedule" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.023"/>
+              <testcase name="testGroupEnrollment" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.024"/>
+              <testcase name="testDependentCoverage" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.019"/>
+              <testcase name="testCOBRAEligibility" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.027"/>
+              <testcase name="testMedicarePartA" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.020"/>
+              <testcase name="testMedicarePartB" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.022"/>
+              <testcase name="testMedicaidDualEligible" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.021"/>
+              <testcase name="testPlanTypeHMO" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.018"/>
+              <testcase name="testPlanTypePPO" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.019"/>
+              <testcase name="testPlanTypeEPO" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.020"/>
+              <testcase name="testPlanTypeHDHP" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.018"/>
+              <testcase name="testHSAEligibility" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.022"/>
+              <testcase name="testFSAEligibility" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.019"/>
+              <testcase name="testEligibility270Transaction" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.025"/>
+              <testcase name="testEligibility271Response" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.023"/>
+              <testcase name="testRealTimeEligibilityCheck" classname="com.bcbsaz.claims.EligibilityServiceTest" time="0.021"/>
+            </testsuite>
+            <testsuite name="com.bcbsaz.claims.ProviderServiceTest" tests="21" failures="0" errors="0" skipped="0" time="0.433">
+              <testcase name="testProviderLookupByNPI" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.024"/>
+              <testcase name="testProviderLookupByTaxId" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.019"/>
+              <testcase name="testProviderLookupByName" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.022"/>
+              <testcase name="testProviderNetworkStatus" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.018"/>
+              <testcase name="testProviderSpecialty" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.017"/>
+              <testcase name="testProviderCredentials" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.021"/>
+              <testcase name="testProviderContract" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.025"/>
+              <testcase name="testProviderFeeSchedule" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.020"/>
+              <testcase name="testProviderDirectory" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.023"/>
+              <testcase name="testProviderSearch" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.019"/>
+              <testcase name="testProviderPagination" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.018"/>
+              <testcase name="testProviderGeosearch" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.022"/>
+              <testcase name="testProviderGroupPractice" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.021"/>
+              <testcase name="testProviderHospitalAffiliation" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.020"/>
+              <testcase name="testProviderLanguages" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.017"/>
+              <testcase name="testProviderAcceptingNewPatients" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.019"/>
+              <testcase name="testProviderTelehealth" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.018"/>
+              <testcase name="testProviderSanctionCheck" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.023"/>
+              <testcase name="testProviderLicenseValidation" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.021"/>
+              <testcase name="testProviderDEANumber" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.019"/>
+              <testcase name="testProviderBoardCertification" classname="com.bcbsaz.claims.ProviderServiceTest" time="0.022"/>
+            </testsuite>
+          </testsuites>
+          XMLEOF
+
+      - name: Publish test results
+        uses: cloudbees-io/publish-test-results@v1
+        with:
+          test-results: "test-results/*.xml"
 
       - name: Configure container registry
         uses: cloudbees-io/configure-oci-credentials@v1
@@ -98,7 +199,7 @@ jobs:
             | Commit | ${{ cloudbees.scm.sha }} |
             | Branch | ${{ cloudbees.scm.branch }} |
             | Jenkins Build | #${{ steps.simulate-jenkins.outputs.build-number }} |
-            | Jenkins Job | Core/Pet Clinic Pipeline |
+            | Jenkins Job | Core/BCBS-AZ-Claims-API |
             | Jenkins Status | ✅ ${{ steps.simulate-jenkins.outputs.status }} |
             | Jenkins Duration | 1 min 47 sec |
 
