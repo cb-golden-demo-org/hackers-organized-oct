@@ -168,7 +168,7 @@ jobs:
         uses: cloudbees-io/publish-test-results@v1
         with:
           folder-name: "test-results"
-          test-type: TEST_TYPE_JUNIT
+          test-type: JUNIT
 
       - name: Configure container registry
         uses: cloudbees-io/configure-oci-credentials@v1
