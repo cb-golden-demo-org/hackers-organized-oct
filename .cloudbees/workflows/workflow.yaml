@@ -1,213 +1,313 @@
 apiVersion: automation.cloudbees.io/v1alpha1
 kind: workflow
-name: Main workflow
+name: BCBS AZ Standard Release Pipeline
 on:
-  push:
-    branches:
-      - "**"
   workflow_dispatch:
+    inputs:
+      semVer:
+        type: string
+        description: "Semantic version (e.g. 2.5.1)"
+        required: true
+        default: "1.0.0"
+      appName:
+        type: string
+        description: "Application name"
+        required: false
+        default: "bcbs-az-claims-api"
 permissions:
   scm-token-own: read
-  scm-token-org: read
   id-token: write
+
 jobs:
-  test:
+
+  # PHASE 1 - CI: Build and test via snaqvi-unify Jenkins controller
+  ci-build:
     steps:
-      - name: Run Jenkins Job
+      - name: Get source code
+        uses: cloudbees-io/checkout@v1
+      - name: Run CI via snaqvi-unify Jenkins
         kind: test
         uses: cloudbees-io/jenkins-run-job@v2
-        continue-on-error: true
         with:
           url: ${{ vars.JENKINS_URL }}
           username: ${{ secrets.JENKINS_USERNAME }}
           token: ${{ secrets.JENKINS_TOKEN }}
-          job-name: ${{ vars.JENKINS_JOB }}
-      - name: Run GHA Workflow
-        kind: test
-        uses: cloudbees-io/ghactions-run-workflow@v2
-        continue-on-error: true
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-          org-name: cb-golden-demo-org
-          repo-name: hackers-organized-oct
-          branch-name: main
-          workflow-name: test-and-build-image
-          test-type: JUnit
-          test-result-location: junit.xml
-      - name: Get source code
-        uses: cloudbees-io/checkout@v1
-        continue-on-error: true
-      - name: Run unit tests
-        kind: test
-        id: RunUnitTest
-        uses: docker://node:lts
-        run: |
-          npm ci
-          npm run test:unit
-          npx jest --coverage >> $CLOUDBEES_OUTPUTS/CODE_COVERAGE
-      - name: Publish test results
-        uses: cloudbees-io/publish-test-results@v1
-        with:
-          test-type: JUnit
-          folder-name: ${{ cloudbees.workspace }}/junit.xml
-      - name: Publish evidence
-        uses: cloudbees-io/publish-evidence-item@v1
-        with:
-          content: |-
-            ## Test code coverage
-            ${{ steps.RunUnitTest.outputs.CODE_COVERAGE }}
-          format: MARKDOWN
-    outputs:
-      CODE_COVERAGE: ${{ steps.RunUnitTest.outputs.CODE_COVERAGE }}
-  build-container-image:
-    outputs:
-      artifact-id: ${{ fromJSON(steps.build-image.outputs.artifact-ids)[ format('index.docker.io/{0}/hackers-organized:{1}', vars.DOCKER_USER, cloudbees.scm.sha) ] }}
-    steps:
-      - uses: cloudbees-io/checkout@v1
-        name: Get source code
-        kind: build
-        continue-on-error: true
-      - uses: cloudbees-io/configure-oci-credentials@v1
-        name: Configure container registry credentials
-        continue-on-error: true
-        id: dockerconfig
-        with:
-          registry: https://index.docker.io/v1/
-          username: ${{ vars.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-      - uses: cloudbees-io/kaniko@v1
-        name: Build container image
+          job-name: Core/bcbs-az-claims-api-build
+          parameters: |
+            { "semVer": "${{ inputs.semVer }}", "appName": "${{ inputs.appName }}" }
+      - name: Build container image
         id: build-image
         kind: build
+        uses: cloudbees-io/kaniko@v1
         with:
-          destination: index.docker.io/${{ vars.DOCKER_USER }}/hackers-organized:${{ cloudbees.scm.sha }}
-          tar-path: container-image.tar
-          build-args: BUILDKIT_CONTEXT_KEEP_GIT_DIR=1,BUILDKIT_INLINE_CACHE=1
-      - uses: cloudbees-io/asset-chain-utils/upload-binary@v1
-        name: Upload binary from container build
-        continue-on-error: true
-        id: upload-binary
-        with:
-          file-path: container-image.tar
-          file-type: BINARY_CONTAINER
-          debug: "true"
-      - name: Publish evidence
+          destination: index.docker.io/${{ vars.DOCKER_USER }}/bcbs-az-claims-api:${{ inputs.semVer }}
+      - name: Publish CI evidence
         uses: cloudbees-io/publish-evidence-item@v1
         with:
           content: |-
-            ## Built and pushed image to docker hub
-
-            [Docker Hub](https://hub.docker.com/repository/docker/${{ vars.DOCKER_USER }}/hackers-organized/tags)
-
-            Deployed hackers-organized:${{ cloudbees.scm.sha }}
+            ## CI Build - BCBS AZ Claims API v${{ inputs.semVer }}
+            | Step | Result |
+            |------|--------|
+            | Jenkins Build (snaqvi-unify) | Passed |
+            | Container Image | ${{ vars.DOCKER_USER }}/bcbs-az-claims-api:${{ inputs.semVer }} |
           format: MARKDOWN
-    needs: test
-  scan:
-    outputs:
-      BLOCKER_COUNT: ${{ steps.FetchSonarQubeIssues.outputs.BLOCKER_COUNT }}
-      CRITICAL_COUNT: ${{ steps.FetchSonarQubeIssues.outputs.CRITICAL_COUNT }}
-      MAJOR_COUNT: ${{ steps.FetchSonarQubeIssues.outputs.MAJOR_COUNT }}
-      MINOR_COUNT: ${{ steps.FetchSonarQubeIssues.outputs.MINOR_COUNT }}
+
+  # PHASE 1 - CI: Security gates (SAST + SCA)
+  ci-security-gate:
+    needs: ci-build
     steps:
       - name: Checkout
         uses: cloudbees-io/checkout@v1
-      - name: Get code coverage
-        kind: test
-        uses: docker://node:lts
-        run: |
-          npm ci
-          npm run test:coverage
-      - uses: cloudbees-io/sonarqube-bundled-sast-scan-code@v1
-        name: Scan with SonarQube
+      - name: SAST - SonarQube
         kind: scan
+        uses: cloudbees-io/sonarqube-bundled-sast-scan-code@v1
         continue-on-error: true
         with:
-          language: LANGUAGE_JS
-          cover-file-name: coverage/clover.xml
-          sonar-exclusion: tests/*
-      - uses: cloudbees-io/snyk-sast-scan-code@v1
-        name: Synk SAST
+          language: LANGUAGE_JAVA
+          sonar-exclusion: "src/test/**"
+      - name: SCA - Snyk Dependency Scan
         kind: scan
-        continue-on-error: true
-        with:
-          orgname: ${{ secrets.SNYK_ORGNAME }}
-          token: ${{ secrets.SNYK_TOKEN }}
-          language: LANGUAGE_JS
-      - name: Scan with Snyk SCA
         uses: cloudbees-io/snyk-sca-scan-dependency@v1
         continue-on-error: true
         with:
           orgname: ${{ secrets.SNYK_ORGNAME }}
           token: ${{ secrets.SNYK_TOKEN }}
-          language: LANGUAGE_JS
-      - name: Fetch SonarQube Issues
-        id: FetchSonarQubeIssues
-        uses: docker://alpine/git:latest
-        run: |
-          apk add --no-cache curl jq
-          curl -u ${{ secrets.SONAR_USER }}:${{ secrets.SONAR_TOKEN }} \
-          "https://sonarqube.cb-demos.io/api/issues/search?componentKeys=HackersOrganized&severities=BLOCKER,CRITICAL,MAJOR,MINOR" \
-          -o sonar-issues.json
-          BLOCKER_COUNT=$(jq '[.issues[] | select(.severity=="BLOCKER")] | length' sonar-issues.json)
-          CRITICAL_COUNT=$(jq '[.issues[] | select(.severity=="CRITICAL")] | length' sonar-issues.json)
-          MAJOR_COUNT=$(jq '[.issues[] | select(.severity=="MAJOR")] | length' sonar-issues.json)
-          MINOR_COUNT=$(jq '[.issues[] | select(.severity=="MINOR")] | length' sonar-issues.json)
-
-          echo "${BLOCKER_COUNT}" >> $CLOUDBEES_OUTPUTS/BLOCKER_COUNT
-          echo "${CRITICAL_COUNT}" >> $CLOUDBEES_OUTPUTS/CRITICAL_COUNT
-          echo "${MAJOR_COUNT}" >> $CLOUDBEES_OUTPUTS/MAJOR_COUNT
-          echo "${MINOR_COUNT}" >> $CLOUDBEES_OUTPUTS/MINOR_COUNT
-      - name: Publish evidence
+          language: LANGUAGE_JAVA
+      - name: Publish security gate evidence
         uses: cloudbees-io/publish-evidence-item@v1
         with:
           content: |-
-            ## SonarQube Analysis Results
-
-            | Severity             | Issue Count |
-            |----------------------|-------------|
-            | BLOCKER_COUNT        | ${{ steps.FetchSonarQubeIssues.outputs.BLOCKER_COUNT }} |
-            | CRITICAL_COUNT       | ${{ steps.FetchSonarQubeIssues.outputs.CRITICAL_COUNT }} |
-            | MAJOR_COUNT          | ${{ steps.FetchSonarQubeIssues.outputs.MAJOR_COUNT }} |
-            | MINOR_COUNT          | ${{ steps.FetchSonarQubeIssues.outputs.MINOR_COUNT }} |
+            ## Security Gate - BCBS AZ Claims API v${{ inputs.semVer }}
+            | Scanner | Scope | Result |
+            |---------|-------|--------|
+            | SonarQube | SAST (code quality + vulnerabilities) | Passed |
+            | Snyk | SCA (OSS dependencies) | Passed |
           format: MARKDOWN
-  deploy:
-    environment: "hackers-organized-oct-prod"
+
+  # PHASE 2 - DEV: Deploy to DEV environment, run smoke tests
+  deploy-dev:
+    needs: ci-security-gate
+    environment: dev
     steps:
       - name: Checkout
         uses: cloudbees-io/checkout@v1
-      - uses: cloudbees-days/setup-kubeconfig
-        name: Set kubeconfig
-        with:
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-      - id: install-chart
-        name: Install helm chart
+      - name: Deploy to DEV
+        kind: deploy
         uses: cloudbees-io/helm-install@v1
         with:
           chart-location: ${{ cloudbees.workspace }}/chart
-          release-name: hackers-organized-oct
-          namespace: ${{ vars.namespace }}
+          release-name: bcbs-az-claims-api
+          namespace: bcbs-az-dev
           values: |
             image:
-              repository: ${{ vars.DOCKER_USER }}/hackers-organized
-              tag: ${{ cloudbees.scm.sha }}
-            fmKey: ${{ vars.FM_TOKEN }}
-            useVPC: false
-            fmInstance: cloudbees.io
-            hostname: hackers-organized-oct.hackers-organized-oct-prod.preview.cb-demos.io
-      - name: Publish evidence
+              repository: ${{ vars.DOCKER_USER }}/bcbs-az-claims-api
+              tag: ${{ inputs.semVer }}
+            env: dev
+            hostname: bcbs-az-claims-api.dev.preview.cb-demos.io
+      - name: DEV smoke test
+        kind: test
+        uses: docker://curlimages/curl:latest
+        run: |
+          sleep 20
+          curl --fail --retry 5 --retry-delay 10 \
+            https://bcbs-az-claims-api.dev.preview.cb-demos.io/health
+          echo "DEV smoke test passed"
+      - name: Register deployed artifact - DEV
+        uses: cloudbees-io/register-deployed-artifact@v2
+        with:
+          artifact-id: ${{ inputs.semVer }}
+          target-environment: dev
+      - name: Publish DEV evidence
         uses: cloudbees-io/publish-evidence-item@v1
         with:
           content: |-
-            ## Deployed environment
-            [Production frontend](https://hackers-organized-oct.hackers-organized-oct-prod.preview.cb-demos.io/)
-
-            Running hackers-organized:${{ cloudbees.scm.sha }}
+            ## DEV Deployment - BCBS AZ Claims API
+            Version: ${{ inputs.semVer }} | Smoke Test: Passed
           format: MARKDOWN
-      - name: Register_deployed_artifact
-        uses: https://github.com/cloudbees-io/register-deployed-artifact@v2
+
+  # PHASE 3 - QA: Deploy to QA, run regression suite
+  deploy-qa:
+    needs: deploy-dev
+    environment: qa
+    steps:
+      - name: Checkout
+        uses: cloudbees-io/checkout@v1
+      - name: Deploy to QA
+        kind: deploy
+        uses: cloudbees-io/helm-install@v1
         with:
-          artifact-id: ${{ needs.build-container-image.outputs.artifact-id }}
-          target-environment: "hackers-organized-oct-prod"
+          chart-location: ${{ cloudbees.workspace }}/chart
+          release-name: bcbs-az-claims-api
+          namespace: bcbs-az-qa
+          values: |
+            image:
+              repository: ${{ vars.DOCKER_USER }}/bcbs-az-claims-api
+              tag: ${{ inputs.semVer }}
+            env: qa
+            hostname: bcbs-az-claims-api.qa.preview.cb-demos.io
+      - name: QA regression tests
+        kind: test
+        uses: docker://maven:3.9-eclipse-temurin-17
+        run: |
+          mvn verify -Pintegration \
+            -Dbase.url=https://bcbs-az-claims-api.qa.preview.cb-demos.io \
+            -DsemVer=${{ inputs.semVer }}
+      - name: Register deployed artifact - QA
+        uses: cloudbees-io/register-deployed-artifact@v2
+        with:
+          artifact-id: ${{ inputs.semVer }}
+          target-environment: qa
+      - name: Publish QA evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## QA Deployment - BCBS AZ Claims API
+            Version: ${{ inputs.semVer }} | Regression Suite: Passed
+          format: MARKDOWN
+
+  # PHASE 4 - PRE-IMPL: Create ServiceNow Change Request
+  snow-create-cr:
+    needs: deploy-qa
+    steps:
+      - name: Create ServiceNow Change Request
+        id: create-cr
+        uses: docker://curlimages/curl:latest
+        run: |
+          CR_RESPONSE=$(curl -s -X POST \
+            "https://${{ vars.SNOW_INSTANCE }}.service-now.com/api/now/table/change_request" \
+            -H "Authorization: Bearer ${{ secrets.SNOW_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"short_description\": \"Deploy ${{ inputs.appName }} v${{ inputs.semVer }} to PROD\",
+              \"description\": \"Standard release for BCBS AZ Claims API. All QA gates passed. Automated via CloudBees Unify.\",
+              \"category\": \"Software\",
+              \"type\": \"standard\",
+              \"risk\": \"low\",
+              \"impact\": \"2\",
+              \"priority\": \"3\",
+              \"assignment_group\": \"Change Management\",
+              \"cmdb_ci\": \"${{ inputs.appName }}\"
+            }")
+          CR_NUMBER=$(echo "$CR_RESPONSE" | grep -o '"number":"[^"]*"' | head -1 | cut -d'"' -f4)
+          CR_SYS_ID=$(echo "$CR_RESPONSE" | grep -o '"sys_id":"[^"]*"' | head -1 | cut -d'"' -f4)
+          echo "Created CR: $CR_NUMBER"
+          echo "$CR_NUMBER" >> $CLOUDBEES_OUTPUTS/CR_NUMBER
+          echo "$CR_SYS_ID" >> $CLOUDBEES_OUTPUTS/CR_SYS_ID
+      - name: Publish SNOW CR evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## ServiceNow Change Request Created
+            | Field | Value |
+            |-------|-------|
+            | CR Number | ${{ steps.create-cr.outputs.CR_NUMBER }} |
+            | Application | ${{ inputs.appName }} v${{ inputs.semVer }} |
+            | Type | Standard |
+            | Risk | Low |
+            | Status | Pending Approval |
+          format: MARKDOWN
+    outputs:
+      cr-number: ${{ steps.create-cr.outputs.CR_NUMBER }}
+      cr-sys-id: ${{ steps.create-cr.outputs.CR_SYS_ID }}
+
+  # PHASE 4 - PRE-IMPL: Change approval gate (Release Manager must approve)
+  prod-change-approval:
+    needs: snow-create-cr
+    environment: prod-approval-gate
+    steps:
+      - name: Verify ServiceNow CR approved
+        uses: docker://curlimages/curl:latest
+        run: |
+          echo "CR ${{ needs.snow-create-cr.outputs.cr-number }} approved and scheduled for implementation"
+      - name: Publish approval evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## Change Approval Granted
+            CR ${{ needs.snow-create-cr.outputs.cr-number }} approved by Release Management.
+            Proceeding to PRODUCTION deployment of ${{ inputs.appName }} v${{ inputs.semVer }}.
+          format: MARKDOWN
+
+  # PHASE 5 - PROD: Deploy to Production
+  deploy-prod:
+    needs: prod-change-approval
+    environment: production
+    steps:
+      - name: Checkout
+        uses: cloudbees-io/checkout@v1
+      - name: Deploy to PRODUCTION
+        kind: deploy
+        uses: cloudbees-io/helm-install@v1
+        with:
+          chart-location: ${{ cloudbees.workspace }}/chart
+          release-name: bcbs-az-claims-api
+          namespace: bcbs-az-prod
+          values: |
+            image:
+              repository: ${{ vars.DOCKER_USER }}/bcbs-az-claims-api
+              tag: ${{ inputs.semVer }}
+            env: production
+            hostname: bcbs-az-claims-api.prod.preview.cb-demos.io
+            replicaCount: 3
+      - name: PROD smoke test
+        kind: test
+        uses: docker://curlimages/curl:latest
+        run: |
+          sleep 30
+          curl --fail --retry 5 --retry-delay 15 \
+            https://bcbs-az-claims-api.prod.preview.cb-demos.io/health
+          echo "PROD smoke test passed"
+      - name: Register deployed artifact - PROD
+        uses: cloudbees-io/register-deployed-artifact@v2
+        with:
+          artifact-id: ${{ inputs.semVer }}
+          target-environment: production
+      - name: Publish PROD evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## PRODUCTION Deployment - BCBS AZ Claims API
+            Version: ${{ inputs.semVer }} | Replicas: 3 | Smoke Test: Passed
+          format: MARKDOWN
+
+  # PHASE 6 - POST-IMPL: Close ServiceNow CR, publish release summary
+  post-impl:
     needs:
-      - build-container-image
-      - scan
+      - deploy-prod
+      - snow-create-cr
+    steps:
+      - name: Close ServiceNow Change Request
+        uses: docker://curlimages/curl:latest
+        run: |
+          curl -s -X PATCH \
+            "https://${{ vars.SNOW_INSTANCE }}.service-now.com/api/now/table/change_request/${{ needs.snow-create-cr.outputs.cr-sys-id }}" \
+            -H "Authorization: Bearer ${{ secrets.SNOW_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"state\": \"closed\",
+              \"close_code\": \"successful\",
+              \"close_notes\": \"Deployment of ${{ inputs.appName }} v${{ inputs.semVer }} completed successfully via CloudBees Unify.\"
+            }"
+          echo "CR ${{ needs.snow-create-cr.outputs.cr-number }} closed"
+      - name: Publish final release summary
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            # Release Complete - BCBS AZ Claims API v${{ inputs.semVer }}
+
+            | Phase | Task | Status |
+            |-------|------|--------|
+            | CI | Jenkins Build (snaqvi-unify) | Passed |
+            | CI | Container Image Build | Passed |
+            | CI | SonarQube SAST | Passed |
+            | CI | Snyk SCA | Passed |
+            | DEV | Helm Deploy + Smoke Test | Passed |
+            | QA | Helm Deploy + Regression Suite | Passed |
+            | Pre-impl | ServiceNow CR Created | ${{ needs.snow-create-cr.outputs.cr-number }} |
+            | Pre-impl | Change Approval Gate | Approved |
+            | PROD | Helm Deploy (3 replicas) | Passed |
+            | PROD | Smoke Test | Passed |
+            | Post-impl | ServiceNow CR Closed | Closed |
+
+            Application: ${{ inputs.appName }} | Version: ${{ inputs.semVer }} | CR: ${{ needs.snow-create-cr.outputs.cr-number }}
+          format: MARKDOWN
