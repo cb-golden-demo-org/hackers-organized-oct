@@ -167,7 +167,7 @@ jobs:
       - name: Publish test results
         uses: cloudbees-io/publish-test-results@v1
         with:
-          test-results: "test-results/*.xml"
+          folder-name: "test-results"
 
       - name: Configure container registry
         uses: cloudbees-io/configure-oci-credentials@v1
