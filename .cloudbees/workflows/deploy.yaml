@@ -1,0 +1,31 @@
+  apiVersion: automation.cloudbees.io/v1alpha1
+  kind: workflow
+  name: deploy
+  on:
+    workflow_call:
+      inputs:
+        artifact-id:
+          type: string
+          required: true
+        artifact-url:
+          type: string
+          required: true
+        environment:
+          type: string
+          required: true
+  jobs:
+    deploy:
+      environment: \${{ inputs.environment }}
+      steps:
+        - name: Deploy bcbs-az-claims-api
+          kind: deploy
+          uses: docker://alpine:3.20
+          run: |
+            echo \"Deploying bcbs-az-claims-api\"
+            echo \"Artifact: \${{ inputs.artifact-url }}\"
+            echo \"Target: \${{ inputs.environment }}\"
+        - name: Register deployed artifact
+          uses: cloudbees-io/register-deployed-artifact@v2
+          with:
+            artifact-id: \${{ inputs.artifact-id }}
+            target-environment: \${{ inputs.environment }}
